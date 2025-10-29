@@ -47,51 +47,45 @@ export const QueryInterface = () => {
     }
 
     setIsLoading(true);
+    setResults(null);
     
-    // Simulate API call - replace with actual edge function call
-    setTimeout(() => {
-      const mockResults = {
-        answer: `Based on the available data from data.gov.in, here are the insights for your query: "${query}"`,
-        charts: [
-          {
-            type: "bar",
-            title: "Sample Data Visualization",
-            data: [
-              { name: "2019", value: 450 },
-              { name: "2020", value: 520 },
-              { name: "2021", value: 480 },
-              { name: "2022", value: 550 },
-              { name: "2023", value: 600 }
-            ]
-          }
-        ],
-        citations: [
-          {
-            title: "Crop Production (State-wise, Year-wise)",
-            resource_id: "AGRI_RESOURCE_001",
-            api_url: "https://api.data.gov.in/resource/AGRI_RESOURCE_001?api-key=***&filters[year]=2022"
-          },
-          {
-            title: "IMD Rainfall Monthly Data",
-            resource_id: "IMD_RAIN_001",
-            api_url: "https://api.data.gov.in/resource/IMD_RAIN_001?api-key=***&filters[state]=Maharashtra"
-          }
-        ],
-        provenance: {
-          query_time: new Date().toISOString(),
-          execution_steps: 3,
-          data_sources: 2
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      
+      const { data, error } = await supabase.functions.invoke('process-query', {
+        body: { 
+          question: query,
+          sessionId: crypto.randomUUID()
         }
-      };
+      });
 
-      setResults(mockResults);
-      setIsLoading(false);
+      if (error) throw error;
+      
+      setResults(data);
       
       toast({
         title: "Query completed",
         description: "Results generated with full provenance tracking"
       });
-    }, 2000);
+    } catch (error: any) {
+      console.error('Query error:', error);
+      
+      let errorMessage = "Failed to process query. Please try again.";
+      
+      if (error.message?.includes('rate limit')) {
+        errorMessage = "Too many requests. Please wait a moment and try again.";
+      } else if (error.message?.includes('credits')) {
+        errorMessage = "AI usage credits depleted. Please contact support.";
+      }
+      
+      toast({
+        title: "Query failed",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleExampleClick = (exampleQuery: string) => {
