@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Leaf, Cloud, Search, Database, TrendingUp, BarChart3 } from "lucide-react";
 import { QueryInterface } from "@/components/QueryInterface";
 import { DataInsights } from "@/components/DataInsights";
 import { DataIngestion } from "@/components/DataIngestion";
+import { BackendExplorer } from "@/components/BackendExplorer";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("query");
@@ -97,10 +96,10 @@ const Index = () => {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3 bg-muted/50">
+          <TabsList className="grid w-full max-w-3xl mx-auto grid-cols-4 bg-muted/50">
             <TabsTrigger value="query" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Search className="h-4 w-4 mr-2" />
-              Query Data
+              Query
             </TabsTrigger>
             <TabsTrigger value="insights" className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
               <TrendingUp className="h-4 w-4 mr-2" />
@@ -108,7 +107,11 @@ const Index = () => {
             </TabsTrigger>
             <TabsTrigger value="ingest" className="data-[state=active]:bg-foreground data-[state=active]:text-background">
               <Database className="h-4 w-4 mr-2" />
-              Ingest Data
+              Ingest
+            </TabsTrigger>
+            <TabsTrigger value="backend" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Backend
             </TabsTrigger>
           </TabsList>
 
@@ -122,6 +125,10 @@ const Index = () => {
 
           <TabsContent value="ingest" className="space-y-6">
             <DataIngestion />
+          </TabsContent>
+
+          <TabsContent value="backend" className="space-y-6">
+            <BackendExplorer />
           </TabsContent>
         </Tabs>
       </main>

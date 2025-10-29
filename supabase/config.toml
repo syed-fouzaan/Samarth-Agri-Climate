@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.ingest-data]
 verify_jwt = false
+
+[functions.sync-data-gov-in]
+verify_jwt = false

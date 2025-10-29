@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Database, Upload, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Database, Upload, CheckCircle2, AlertCircle, Loader2, Cloud, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -13,6 +15,9 @@ export const DataIngestion = () => {
   const [datasetId, setDatasetId] = useState<string>("SAMPLE_AGRI_001");
   const [sampleData, setSampleData] = useState<string>("");
   const [isIngesting, setIsIngesting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [resourceId, setResourceId] = useState<string>("9ef84268-d588-465a-a308-a864a43d0070");
+  const [syncLimit, setSyncLimit] = useState<number>(100);
   const [results, setResults] = useState<any>(null);
 
   const handleIngest = async () => {
@@ -104,90 +109,211 @@ export const DataIngestion = () => {
     setSampleData(JSON.stringify(sample, null, 2));
   };
 
+  const handleSync = async () => {
+    if (!resourceId.trim()) {
+      toast({
+        title: "Resource ID required",
+        description: "Please provide a data.gov.in resource ID",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSyncing(true);
+    setResults(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-data-gov-in', {
+        body: {
+          resourceId,
+          limit: syncLimit,
+          offset: 0
+        }
+      });
+
+      if (error) throw error;
+
+      setResults(data);
+      
+      toast({
+        title: "Data sync completed",
+        description: `Successfully synced ${data.inserted} records from data.gov.in`
+      });
+    } catch (error: any) {
+      console.error('Sync error:', error);
+      
+      toast({
+        title: "Sync failed",
+        description: error.message || "Failed to sync data from data.gov.in",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <Card className="p-6 bg-gradient-to-br from-card to-card shadow-soft">
-        <div className="space-y-4">
-          <div className="flex items-start gap-3">
-            <div className="bg-primary/10 p-2 rounded-lg">
-              <Database className="h-5 w-5 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold mb-1">Data Ingestion</h2>
-              <p className="text-sm text-muted-foreground">
-                Add sample agricultural or climate data to the system
-              </p>
-            </div>
-          </div>
+      <Tabs defaultValue="manual" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="manual">Manual Entry</TabsTrigger>
+          <TabsTrigger value="sync">Live Sync</TabsTrigger>
+        </TabsList>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <TabsContent value="manual" className="space-y-6">
+        <Card className="p-6 bg-gradient-to-br from-card to-card shadow-soft">
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="bg-primary/10 p-2 rounded-lg">
+                <Database className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold mb-1">Manual Data Entry</h2>
+                <p className="text-sm text-muted-foreground">
+                  Add sample agricultural or climate data to the system
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Data Type</label>
+                <Select value={dataType} onValueChange={setDataType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="production">Agricultural Production</SelectItem>
+                    <SelectItem value="rainfall">Climate Rainfall</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Dataset ID</label>
+                <Select value={datasetId} onValueChange={setDatasetId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SAMPLE_AGRI_001">SAMPLE_AGRI_001</SelectItem>
+                    <SelectItem value="SAMPLE_CLIMATE_001">SAMPLE_CLIMATE_001</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Data Type</label>
-              <Select value={dataType} onValueChange={setDataType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="production">Agricultural Production</SelectItem>
-                  <SelectItem value="rainfall">Climate Rainfall</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Dataset ID</label>
-              <Select value={datasetId} onValueChange={setDatasetId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SAMPLE_AGRI_001">SAMPLE_AGRI_001</SelectItem>
-                  <SelectItem value="SAMPLE_CLIMATE_001">SAMPLE_CLIMATE_001</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Sample Data (JSON)</label>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadSampleData}
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Sample Data (JSON)</label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadSampleData}
+                  disabled={isIngesting}
+                >
+                  Load Sample
+                </Button>
+              </div>
+              <Textarea
+                placeholder='[{"state": "Punjab", "crop": "Wheat", "year": "2023", ...}]'
+                value={sampleData}
+                onChange={(e) => setSampleData(e.target.value)}
+                className="min-h-[200px] resize-none font-mono text-sm"
                 disabled={isIngesting}
-              >
-                Load Sample
-              </Button>
+              />
             </div>
-            <Textarea
-              placeholder='[{"state": "Punjab", "crop": "Wheat", "year": "2023", ...}]'
-              value={sampleData}
-              onChange={(e) => setSampleData(e.target.value)}
-              className="min-h-[200px] resize-none font-mono text-sm"
-              disabled={isIngesting}
-            />
-          </div>
 
-          <Button
-            onClick={handleIngest}
-            disabled={isIngesting || !sampleData.trim()}
-            className="w-full bg-primary hover:bg-primary/90"
-          >
-            {isIngesting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Ingesting Data...
-              </>
-            ) : (
-              <>
-                <Upload className="h-4 w-4 mr-2" />
-                Ingest Data
-              </>
-            )}
-          </Button>
-        </div>
-      </Card>
+            <Button
+              onClick={handleIngest}
+              disabled={isIngesting || !sampleData.trim()}
+              className="w-full bg-primary hover:bg-primary/90"
+            >
+              {isIngesting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Ingesting Data...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Ingest Data
+                </>
+              )}
+            </Button>
+          </div>
+        </Card>
+        </TabsContent>
+
+        <TabsContent value="sync" className="space-y-6">
+          <Card className="p-6 bg-gradient-to-br from-card to-card shadow-soft">
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="bg-primary/10 p-2 rounded-lg">
+                  <Cloud className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-lg font-semibold mb-1">Live Data Sync</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Sync real data from data.gov.in API
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Resource ID</label>
+                <Input
+                  placeholder="e.g., 9ef84268-d588-465a-a308-a864a43d0070"
+                  value={resourceId}
+                  onChange={(e) => setResourceId(e.target.value)}
+                  disabled={isSyncing}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Find resource IDs at <a href="https://data.gov.in" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">data.gov.in</a>
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Records to Sync</label>
+                <Input
+                  type="number"
+                  min="10"
+                  max="1000"
+                  value={syncLimit}
+                  onChange={(e) => setSyncLimit(parseInt(e.target.value))}
+                  disabled={isSyncing}
+                />
+              </div>
+
+              <Button
+                onClick={handleSync}
+                disabled={isSyncing || !resourceId.trim()}
+                className="w-full bg-primary hover:bg-primary/90"
+              >
+                {isSyncing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Syncing from data.gov.in...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Sync Data
+                  </>
+                )}
+              </Button>
+
+              <div className="bg-muted/50 p-4 rounded-lg space-y-2">
+                <h3 className="text-sm font-semibold">Popular Datasets:</h3>
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <p><strong>Agricultural Production:</strong> 9ef84268-d588-465a-a308-a864a43d0070</p>
+                  <p><strong>Rainfall Data:</strong> e9a7921f-8924-4f1d-b1f9-1b9f8c0a3c8d</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {results && (
         <Card className={`p-6 ${results.success ? 'bg-primary/5 border-primary/20' : 'bg-destructive/5 border-destructive/20'}`}>

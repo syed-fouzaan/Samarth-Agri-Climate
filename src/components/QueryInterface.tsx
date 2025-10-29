@@ -3,8 +3,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Send, Sparkles, AlertCircle } from "lucide-react";
+import { Loader2, Send, Sparkles, AlertCircle, Filter } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { QueryResults } from "./QueryResults";
 
@@ -35,6 +37,14 @@ export const QueryInterface = () => {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<any>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    dataType: "all",
+    state: "",
+    yearFrom: "",
+    yearTo: "",
+    crop: ""
+  });
 
   const handleSubmit = async () => {
     if (!query.trim()) {
@@ -50,11 +60,32 @@ export const QueryInterface = () => {
     setResults(null);
     
     try {
+      // Build enhanced question with filters
+      let enhancedQuestion = query;
+      const activeFilters = [];
+      
+      if (filters.state) activeFilters.push(`for state: ${filters.state}`);
+      if (filters.crop) activeFilters.push(`for crop: ${filters.crop}`);
+      if (filters.yearFrom && filters.yearTo) {
+        activeFilters.push(`between years ${filters.yearFrom} and ${filters.yearTo}`);
+      } else if (filters.yearFrom) {
+        activeFilters.push(`from year ${filters.yearFrom}`);
+      } else if (filters.yearTo) {
+        activeFilters.push(`up to year ${filters.yearTo}`);
+      }
+      if (filters.dataType !== "all") {
+        activeFilters.push(`using ${filters.dataType} data`);
+      }
+      
+      if (activeFilters.length > 0) {
+        enhancedQuestion = `${query} ${activeFilters.join(', ')}`;
+      }
+
       const { supabase } = await import("@/integrations/supabase/client");
       
       const { data, error } = await supabase.functions.invoke('process-query', {
         body: { 
-          question: query,
+          question: enhancedQuestion,
           sessionId: crypto.randomUUID()
         }
       });
@@ -107,7 +138,98 @@ export const QueryInterface = () => {
                 Query agriculture production and climate data with natural language
               </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className="ml-auto"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              {showFilters ? 'Hide' : 'Show'} Filters
+            </Button>
           </div>
+
+          {showFilters && (
+            <Card className="p-4 bg-muted/50 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Data Type</Label>
+                  <Select value={filters.dataType} onValueChange={(value) => setFilters({...filters, dataType: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Data</SelectItem>
+                      <SelectItem value="production">Production Only</SelectItem>
+                      <SelectItem value="rainfall">Rainfall Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>State (Optional)</Label>
+                  <Select value={filters.state} onValueChange={(value) => setFilters({...filters, state: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All states" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All States</SelectItem>
+                      <SelectItem value="Punjab">Punjab</SelectItem>
+                      <SelectItem value="Maharashtra">Maharashtra</SelectItem>
+                      <SelectItem value="Uttar Pradesh">Uttar Pradesh</SelectItem>
+                      <SelectItem value="Karnataka">Karnataka</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Crop (Optional)</Label>
+                  <Select value={filters.crop} onValueChange={(value) => setFilters({...filters, crop: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All crops" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All Crops</SelectItem>
+                      <SelectItem value="Wheat">Wheat</SelectItem>
+                      <SelectItem value="Rice">Rice</SelectItem>
+                      <SelectItem value="Cotton">Cotton</SelectItem>
+                      <SelectItem value="Sugarcane">Sugarcane</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Year Range (Optional)</Label>
+                  <div className="flex gap-2">
+                    <Select value={filters.yearFrom} onValueChange={(value) => setFilters({...filters, yearFrom: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="From" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Any</SelectItem>
+                        <SelectItem value="2020">2020</SelectItem>
+                        <SelectItem value="2021">2021</SelectItem>
+                        <SelectItem value="2022">2022</SelectItem>
+                        <SelectItem value="2023">2023</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={filters.yearTo} onValueChange={(value) => setFilters({...filters, yearTo: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="To" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Any</SelectItem>
+                        <SelectItem value="2020">2020</SelectItem>
+                        <SelectItem value="2021">2021</SelectItem>
+                        <SelectItem value="2022">2022</SelectItem>
+                        <SelectItem value="2023">2023</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
 
           <Textarea
             placeholder="Example: Compare wheat production in Punjab and Haryana over the last 5 years..."
