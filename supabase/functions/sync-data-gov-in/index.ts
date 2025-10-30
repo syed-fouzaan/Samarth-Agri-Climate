@@ -90,10 +90,21 @@ serve(async (req) => {
           .from('fact_production')
           .insert({
             dataset_id: dataset.id,
-            state: record.state || record.State,
-            district: record.district || record.District || null,
-            crop: record.crop || record.Crop,
-            year: parseInt(record.year || record.Year),
+            state: record.state || record.State || null,
+            district: record.district || record.District || record.market || record.Market || null,
+            crop: (record.crop || record.Crop || record.commodity || record.Commodity) ?? 'Unknown',
+            year: (() => {
+              const y = record.year || record.Year;
+              if (y) return parseInt(y);
+              const ad = record.arrival_date || record.Arrival_Date || record.arrivalDate;
+              if (typeof ad === 'string') {
+                const parts = ad.split(/[\/\-]/);
+                const last = parts[parts.length - 1];
+                const parsed = parseInt(last);
+                if (!isNaN(parsed)) return parsed;
+              }
+              return new Date().getFullYear();
+            })(),
             area_ha: record.area_ha || record.Area ? parseFloat(record.area_ha || record.Area) : null,
             production_t: record.production_t || record.Production ? parseFloat(record.production_t || record.Production) : null,
             yield_kg_per_ha: record.yield_kg_per_ha || record.Yield ? parseFloat(record.yield_kg_per_ha || record.Yield) : null,
