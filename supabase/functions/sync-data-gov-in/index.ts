@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const DATA_GOV_API_KEY = 'YOUR_API_KEY_HERE'; // Users can replace with their own key
+const DATA_GOV_API_KEY = Deno.env.get('DATA_GOV_API_KEY');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
