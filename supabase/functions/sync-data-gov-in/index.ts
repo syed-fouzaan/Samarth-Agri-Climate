@@ -40,8 +40,11 @@ serve(async (req) => {
     // Determine data type based on fields
     const firstRecord = apiData.records[0];
     let dataType = 'production';
+    let category: 'agricultural' | 'climate' = 'agricultural';
+    
     if (firstRecord.rainfall_mm || firstRecord.rainfall) {
       dataType = 'rainfall';
+      category = 'climate';
     }
 
     // Get or create dataset
@@ -60,7 +63,7 @@ serve(async (req) => {
           title: apiData.title || `Dataset ${resourceId}`,
           description: apiData.desc || apiData.description || 'Auto-synced from data.gov.in',
           api_url: apiUrl,
-          category: dataType as 'agricultural' | 'climate',
+          category: category,
           columns_mapping: {},
           metadata: {
             source: 'data.gov.in',
