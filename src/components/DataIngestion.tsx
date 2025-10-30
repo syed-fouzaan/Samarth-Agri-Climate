@@ -110,46 +110,11 @@ export const DataIngestion = () => {
   };
 
   const handleSync = async () => {
-    if (!resourceId.trim()) {
-      toast({
-        title: "Resource ID required",
-        description: "Please provide a data.gov.in resource ID",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsSyncing(true);
-    setResults(null);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('sync-data-gov-in', {
-        body: {
-          resourceId,
-          limit: syncLimit,
-          offset: 0
-        }
-      });
-
-      if (error) throw error;
-
-      setResults(data);
-      
-      toast({
-        title: "Data sync completed",
-        description: `Successfully synced ${data.inserted} records from data.gov.in`
-      });
-    } catch (error: any) {
-      console.error('Sync error:', error);
-      
-      toast({
-        title: "Sync failed",
-        description: error.message || "Failed to sync data from data.gov.in",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSyncing(false);
-    }
+    toast({
+      title: "API Key Required",
+      description: "Please configure your data.gov.in API key to use live sync. Use 'Manual Entry' tab for testing with sample data.",
+      variant: "default"
+    });
   };
 
   return (
