@@ -40,7 +40,7 @@ serve(async (req) => {
     // Determine data type based on fields
     const firstRecord = apiData.records[0];
     let dataType = 'production';
-    let category: 'agricultural' | 'climate' = 'agricultural';
+    let category: 'agriculture' | 'climate' | 'mixed' = 'agriculture';
     
     if (firstRecord.rainfall_mm || firstRecord.rainfall) {
       dataType = 'rainfall';
