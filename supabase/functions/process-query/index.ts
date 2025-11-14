@@ -240,59 +240,57 @@ Please analyze this question and provide a comprehensive answer with citations.`
 });
 
 function generateSampleChartData(question: string, production: any[], rainfall: any[]) {
-  const charts = [];
+  const charts: any[] = [];
   const lowerQ = question.toLowerCase();
-  
-  // For production/crop questions
-  if (lowerQ.includes('production') || lowerQ.includes('crop') || lowerQ.includes('tomato') || 
-      lowerQ.includes('wheat') || lowerQ.includes('rice') || lowerQ.includes('trends')) {
-    
-    // Check if asking about state comparison
+
+  // Production-based charts when real production exists
+  if (
+    lowerQ.includes('production') ||
+    lowerQ.includes('crop') ||
+    lowerQ.includes('trends') ||
+    lowerQ.includes('wheat') ||
+    lowerQ.includes('rice') ||
+    lowerQ.includes('tomato')
+  ) {
     if (lowerQ.includes('state') || lowerQ.includes('across')) {
-      const productionByState = aggregateProductionByState(production);
-      if (productionByState.length > 0) {
-        charts.push({
-          type: 'bar',
-          title: 'Production by State',
-          data: productionByState
-        });
-      }
+      const byState = aggregateProductionByState(production);
+      if (byState.length > 0) charts.push({ type: 'bar', title: 'Production by State', data: byState });
     } else {
-      // Year-based trends
-      const productionByYear = aggregateProductionByYear(production);
-      if (productionByYear.length > 0) {
-        charts.push({
-          type: 'bar',
-          title: 'Production Trends',
-          data: productionByYear
-        });
+      const byYear = aggregateProductionByYear(production);
+      if (byYear.length > 0) charts.push({ type: 'bar', title: 'Production Trends', data: byYear });
+    }
+  }
+
+  // Rainfall
+  if (lowerQ.includes('rainfall') || lowerQ.includes('climate')) {
+    const r = aggregateRainfallByYear(rainfall);
+    if (r.length > 0) charts.push({ type: 'line', title: 'Rainfall Patterns', data: r });
+  }
+
+  // Fallback to market price charts when production_t is missing but price exists
+  const noChartData = charts.length === 0 || charts.every(c => !c.data || c.data.length === 0);
+  const hasPriceSignals = production.some(p => getModalPrice(p) !== null);
+
+  if (noChartData && hasPriceSignals) {
+    const priceByState = aggregateModalPriceByState(production);
+    if (priceByState.length > 0) {
+      charts.push({ type: 'bar', title: 'Average Modal Price by State (₹)', data: priceByState });
+    }
+
+    if (lowerQ.includes('trend') || lowerQ.includes('over time')) {
+      const priceTrend = aggregateModalPriceByDate(production);
+      if (priceTrend.length > 0) {
+        charts.push({ type: 'line', title: 'Modal Price Trend (₹)', data: priceTrend });
       }
     }
   }
-  
-  if (lowerQ.includes('rainfall') || lowerQ.includes('climate')) {
-    const rainfallByYear = aggregateRainfallByYear(rainfall);
-    if (rainfallByYear.length > 0) {
-      charts.push({
-        type: 'line',
-        title: 'Rainfall Patterns',
-        data: rainfallByYear
-      });
-    }
-  }
-  
-  // Default chart if no specific match but we have data
+
+  // Last resort overview
   if (charts.length === 0 && production.length > 0) {
     const stateData = aggregateProductionByState(production);
-    if (stateData.length > 0) {
-      charts.push({
-        type: 'bar',
-        title: 'Agricultural Data Overview',
-        data: stateData
-      });
-    }
+    if (stateData.length > 0) charts.push({ type: 'bar', title: 'Agricultural Data Overview', data: stateData });
   }
-  
+
   return charts;
 }
 
@@ -347,4 +345,78 @@ function aggregateRainfallByYear(data: any[]) {
     }))
     .sort((a, b) => parseInt(a.name) - parseInt(b.name))
     .slice(-5); // Last 5 years
+}
+
+// --------- Market price fallbacks (for datasets with price fields only) ---------
+function getModalPrice(item: any): number | null {
+  const rr = item?.raw_record || {};
+  const candidates = [
+    rr.modal_price, rr.Modal_Price, rr['modal price'], rr['Modal Price'], rr.modalPrice
+  ];
+  let val: any = candidates.find((v: any) => v !== undefined && v !== null);
+  if (val === undefined || val === null) {
+    const min = rr.min_price ?? rr.Min_Price ?? rr.minPrice;
+    const max = rr.max_price ?? rr.Max_Price ?? rr.maxPrice;
+    if (min != null && max != null) {
+      const minN = parseFloat(String(min).replace(/,/g, ''));
+      const maxN = parseFloat(String(max).replace(/,/g, ''));
+      if (!isNaN(minN) && !isNaN(maxN)) val = (minN + maxN) / 2;
+    }
+  }
+  if (val == null) return null;
+  const n = parseFloat(String(val).replace(/,/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+function getArrivalDateISO(item: any): string | null {
+  const rr = item?.raw_record || {};
+  const s: any = rr.arrival_date ?? rr.Arrival_Date ?? rr.arrivalDate ?? null;
+  if (typeof s !== 'string') return null;
+  const m = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (m) {
+    const [, d, mo, y] = m;
+    return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  try {
+    const dt = new Date(s);
+    if (!isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+  } catch {}
+  return null;
+}
+
+function aggregateModalPriceByState(data: any[]) {
+  const map = new Map<string, { sum: number; count: number }>();
+  data.forEach(item => {
+    const price = getModalPrice(item);
+    const state = item.state as string | undefined;
+    if (state && price != null) {
+      const curr = map.get(state) || { sum: 0, count: 0 };
+      curr.sum += price;
+      curr.count += 1;
+      map.set(state, curr);
+    }
+  });
+  return Array.from(map.entries())
+    .map(([state, { sum, count }]) => ({ name: state, value: Math.round(sum / count) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+}
+
+function aggregateModalPriceByDate(data: any[]) {
+  const map = new Map<string, { sum: number; count: number }>();
+  data.forEach(item => {
+    const price = getModalPrice(item);
+    const date = getArrivalDateISO(item);
+    if (date && price != null) {
+      const curr = map.get(date) || { sum: 0, count: 0 };
+      curr.sum += price;
+      curr.count += 1;
+      map.set(date, curr);
+    }
+  });
+  return Array.from(map.entries())
+    .map(([date, { sum, count }]) => ({ name: date, value: Math.round(sum / count) }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(-30);
 }
