@@ -149,12 +149,18 @@ Please analyze this question and provide a comprehensive answer with citations.`
     const aiData = await aiResponse.json();
     let contentText = aiData.choices[0].message.content;
     
+    console.log('Raw AI content before processing:', contentText.substring(0, 200));
+    
     // Strip markdown code blocks if present
-    if (contentText.includes('```json')) {
-      contentText = contentText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-    } else if (contentText.includes('```')) {
-      contentText = contentText.replace(/```\n?/g, '');
+    contentText = contentText.trim();
+    if (contentText.startsWith('```')) {
+      // Remove opening code fence
+      contentText = contentText.replace(/^```(?:json)?\s*\n?/, '');
+      // Remove closing code fence
+      contentText = contentText.replace(/\n?```\s*$/, '');
     }
+    
+    console.log('Processed content:', contentText.substring(0, 200));
     
     const aiResult = JSON.parse(contentText.trim());
 
