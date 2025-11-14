@@ -147,7 +147,16 @@ Please analyze this question and provide a comprehensive answer with citations.`
     }
 
     const aiData = await aiResponse.json();
-    const aiResult = JSON.parse(aiData.choices[0].message.content);
+    let contentText = aiData.choices[0].message.content;
+    
+    // Strip markdown code blocks if present
+    if (contentText.includes('```json')) {
+      contentText = contentText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+    } else if (contentText.includes('```')) {
+      contentText = contentText.replace(/```\n?/g, '');
+    }
+    
+    const aiResult = JSON.parse(contentText.trim());
 
     console.log('AI Response:', aiResult);
 
