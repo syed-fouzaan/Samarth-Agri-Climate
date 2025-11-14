@@ -51,16 +51,28 @@ serve(async (req) => {
       throw logError;
     }
 
-    // Build context from database
+    // Build context from database - get relevant data based on question
     const { data: datasets } = await supabase
       .from('datasets')
       .select('*');
 
-    const { data: recentProduction } = await supabase
+    // Query production data more intelligently based on question
+    let productionQuery = supabase
       .from('fact_production')
       .select('*')
-      .order('year', { ascending: false })
-      .limit(100);
+      .order('year', { ascending: false });
+    
+    // Filter by crop if mentioned in question
+    const cropKeywords = ['tomato', 'wheat', 'rice', 'banana', 'turmeric', 'potato', 'onion'];
+    const mentionedCrop = cropKeywords.find(crop => 
+      question.toLowerCase().includes(crop)
+    );
+    
+    if (mentionedCrop) {
+      productionQuery = productionQuery.ilike('crop', `%${mentionedCrop}%`);
+    }
+    
+    const { data: recentProduction } = await productionQuery.limit(100);
 
     const { data: recentRainfall } = await supabase
       .from('fact_rainfall')
@@ -229,37 +241,75 @@ Please analyze this question and provide a comprehensive answer with citations.`
 
 function generateSampleChartData(question: string, production: any[], rainfall: any[]) {
   const charts = [];
+  const lowerQ = question.toLowerCase();
   
-  // Generate relevant chart based on question keywords
-  if (question.toLowerCase().includes('production') || question.toLowerCase().includes('crop')) {
-    const productionByYear = aggregateProductionByYear(production);
-    charts.push({
-      type: 'bar',
-      title: 'Production Trends',
-      data: productionByYear
-    });
+  // For production/crop questions
+  if (lowerQ.includes('production') || lowerQ.includes('crop') || lowerQ.includes('tomato') || 
+      lowerQ.includes('wheat') || lowerQ.includes('rice') || lowerQ.includes('trends')) {
+    
+    // Check if asking about state comparison
+    if (lowerQ.includes('state') || lowerQ.includes('across')) {
+      const productionByState = aggregateProductionByState(production);
+      if (productionByState.length > 0) {
+        charts.push({
+          type: 'bar',
+          title: 'Production by State',
+          data: productionByState
+        });
+      }
+    } else {
+      // Year-based trends
+      const productionByYear = aggregateProductionByYear(production);
+      if (productionByYear.length > 0) {
+        charts.push({
+          type: 'bar',
+          title: 'Production Trends',
+          data: productionByYear
+        });
+      }
+    }
   }
   
-  if (question.toLowerCase().includes('rainfall') || question.toLowerCase().includes('climate')) {
+  if (lowerQ.includes('rainfall') || lowerQ.includes('climate')) {
     const rainfallByYear = aggregateRainfallByYear(rainfall);
-    charts.push({
-      type: 'line',
-      title: 'Rainfall Patterns',
-      data: rainfallByYear
-    });
+    if (rainfallByYear.length > 0) {
+      charts.push({
+        type: 'line',
+        title: 'Rainfall Patterns',
+        data: rainfallByYear
+      });
+    }
   }
   
-  // Default chart if no specific match
+  // Default chart if no specific match but we have data
   if (charts.length === 0 && production.length > 0) {
-    const yearlyData = aggregateProductionByYear(production);
-    charts.push({
-      type: 'bar',
-      title: 'Agricultural Trends',
-      data: yearlyData
-    });
+    const stateData = aggregateProductionByState(production);
+    if (stateData.length > 0) {
+      charts.push({
+        type: 'bar',
+        title: 'Agricultural Data Overview',
+        data: stateData
+      });
+    }
   }
   
   return charts;
+}
+
+function aggregateProductionByState(data: any[]) {
+  const stateMap = new Map<string, number>();
+  
+  data.forEach(item => {
+    if (item.state && item.production_t && item.production_t !== null) {
+      const current = stateMap.get(item.state) || 0;
+      stateMap.set(item.state, current + parseFloat(item.production_t));
+    }
+  });
+  
+  return Array.from(stateMap.entries())
+    .map(([state, value]) => ({ name: state, value: Math.round(value) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10); // Top 10 states
 }
 
 function aggregateProductionByYear(data: any[]) {
