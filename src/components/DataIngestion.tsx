@@ -132,6 +132,10 @@ export const DataIngestion = () => {
       });
 
       if (error) throw error;
+      
+      if (data && !data.success) {
+        throw new Error(data.error || 'Sync failed');
+      }
 
       setResults(data);
       
@@ -142,11 +146,18 @@ export const DataIngestion = () => {
     } catch (error: any) {
       console.error('Sync error:', error);
       
+      const errorMessage = error.message || "Failed to sync data from data.gov.in";
+      const isTemporaryError = errorMessage.includes('schema cache') || errorMessage.includes('521');
+      
       toast({
-        title: "Sync failed",
-        description: error.message || "Failed to sync data from data.gov.in",
+        title: isTemporaryError ? "Temporary error - please retry" : "Sync failed",
+        description: isTemporaryError 
+          ? "The database connection is warming up. Please try again in a few seconds."
+          : errorMessage,
         variant: "destructive"
       });
+      
+      setResults({ success: false, error: errorMessage });
     } finally {
       setIsSyncing(false);
     }

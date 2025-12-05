@@ -16,9 +16,24 @@ serve(async (req) => {
   try {
     const { resourceId, limit = 100, offset = 0 } = await req.json();
     
+    if (!resourceId) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'resourceId is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // Test database connection first
+    const { error: pingError } = await supabase.from('datasets').select('id').limit(1);
+    if (pingError) {
+      console.error('Database connection error:', pingError);
+      // Retry once after a short delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
 
     console.log('Syncing data from data.gov.in for resource:', resourceId);
 
