@@ -80,29 +80,60 @@ serve(async (req) => {
       .order('year', { ascending: false })
       .limit(100);
 
+    // Get unique states for context
+    const uniqueStates = [...new Set((recentProduction || []).map((p: any) => p.state))];
+    const uniqueCommodities = [...new Set((recentProduction || []).map((p: any) => p.crop))];
+    
+    // Calculate summary statistics
+    const priceStats = calculatePriceStats(recentProduction || []);
+    
     // Prepare system prompt with database schema and available data
-    const systemPrompt = `You are an expert agricultural and climate data analyst. You help users query Indian agriculture production and climate datasets.
+    const systemPrompt = `You are an expert agricultural and climate data analyst specializing in Indian markets. You have access to REAL, LIVE market data from data.gov.in.
 
-Available Datasets:
+CRITICAL: You are analyzing REAL DATA, not sample/mock data. Provide actionable insights based on actual market prices and trends.
+
+Available Real Data Summary:
+- States with data: ${uniqueStates.join(', ')}
+- Commodities tracked: ${uniqueCommodities.join(', ')}
+- Total records: ${(recentProduction || []).length}
+- Price range: ₹${priceStats.minPrice} - ₹${priceStats.maxPrice}
+- Average modal price: ₹${priceStats.avgPrice}
+
+Datasets:
 ${JSON.stringify(datasets, null, 2)}
 
-You have access to:
-1. fact_production table: Contains state-wise crop production data (state, crop, year, area_ha, production_t, yield_kg_per_ha)
-2. fact_rainfall table: Contains rainfall data (state, year, month, rainfall_mm)
+Database Schema:
+1. fact_production: state, crop, district, year, area_ha, production_t, yield_kg_per_ha, raw_record (contains: market, commodity, variety, grade, min_price, max_price, modal_price, arrival_date)
+2. fact_rainfall: state, year, month, rainfall_mm, district
 
-Recent data sample is available in the context.
+Your analysis capabilities:
+1. Price trend analysis and forecasting
+2. State-wise market comparison
+3. Commodity price volatility detection
+4. Supply-demand pattern identification
+5. Seasonal trend analysis
+6. Anomaly detection in market prices
 
-Your task is to:
-1. Analyze the user's question
-2. Determine what data is needed
-3. Generate appropriate insights
-4. Provide clear, accurate answers with proper citations
-5. Suggest relevant visualizations
+ALWAYS:
+- Use actual numbers from the data provided
+- Compare states when asked
+- Identify price patterns and trends
+- Provide specific actionable recommendations
+- Generate insights farmers and traders can use
 
 Response format (JSON):
 {
-  "answer_text": "Clear answer to the question",
-  "data_insights": [Array of key insights],
+  "answer_text": "Detailed answer with specific numbers from the data",
+  "data_insights": ["Specific insight 1 with numbers", "Insight 2", ...],
+  "predictions": [
+    {
+      "commodity": "name",
+      "trend": "up/down/stable",
+      "confidence": "high/medium/low",
+      "reason": "explanation"
+    }
+  ],
+  "recommendations": ["Actionable recommendation 1", "Recommendation 2"],
   "citations": [
     {
       "title": "Dataset title",
@@ -113,20 +144,39 @@ Response format (JSON):
   ],
   "chart_suggestions": [
     {
-      "type": "bar|line|pie",
+      "type": "bar|line|pie|radar",
       "title": "Chart title",
       "description": "What to visualize"
     }
   ],
-  "sql_context": "Explanation of what SQL queries would be needed"
+  "sql_context": "SQL explanation"
 }`;
+
+    // Build detailed data context
+    const stateDataSummary = buildStateDataSummary(recentProduction || []);
 
     const userPrompt = `Question: ${question}
 
-Recent Production Data Sample: ${JSON.stringify(recentProduction?.slice(0, 10))}
-Recent Rainfall Data Sample: ${JSON.stringify(recentRainfall?.slice(0, 10))}
+STATE-WISE DATA SUMMARY:
+${stateDataSummary}
 
-Please analyze this question and provide a comprehensive answer with citations.`;
+DETAILED RECORDS (Latest ${Math.min(20, (recentProduction || []).length)} records):
+${JSON.stringify((recentProduction || []).slice(0, 20).map((p: any) => ({
+  state: p.state,
+  crop: p.crop,
+  district: p.district,
+  year: p.year,
+  modal_price: p.raw_record?.modal_price,
+  min_price: p.raw_record?.min_price,
+  max_price: p.raw_record?.max_price,
+  market: p.raw_record?.market,
+  variety: p.raw_record?.variety,
+  arrival_date: p.raw_record?.arrival_date
+})), null, 2)}
+
+Rainfall Data: ${JSON.stringify(recentRainfall?.slice(0, 10))}
+
+Analyze this REAL market data and provide specific insights, predictions, and recommendations.`;
 
     // Call Lovable AI
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -419,4 +469,73 @@ function aggregateModalPriceByDate(data: any[]) {
     .map(([date, { sum, count }]) => ({ name: date, value: Math.round(sum / count) }))
     .sort((a, b) => a.name.localeCompare(b.name))
     .slice(-30);
+}
+
+// --------- AI Analysis Helper Functions ---------
+function calculatePriceStats(data: any[]): { minPrice: number; maxPrice: number; avgPrice: number } {
+  const prices: number[] = [];
+  
+  data.forEach(item => {
+    const price = getModalPrice(item);
+    if (price !== null && price > 0) {
+      prices.push(price);
+    }
+  });
+  
+  if (prices.length === 0) {
+    return { minPrice: 0, maxPrice: 0, avgPrice: 0 };
+  }
+  
+  return {
+    minPrice: Math.round(Math.min(...prices)),
+    maxPrice: Math.round(Math.max(...prices)),
+    avgPrice: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length)
+  };
+}
+
+function buildStateDataSummary(data: any[]): string {
+  const stateMap = new Map<string, {
+    records: number;
+    commodities: Set<string>;
+    avgPrice: number;
+    priceCount: number;
+    markets: Set<string>;
+  }>();
+  
+  data.forEach(item => {
+    const state = item.state as string;
+    if (!state) return;
+    
+    if (!stateMap.has(state)) {
+      stateMap.set(state, {
+        records: 0,
+        commodities: new Set(),
+        avgPrice: 0,
+        priceCount: 0,
+        markets: new Set()
+      });
+    }
+    
+    const entry = stateMap.get(state)!;
+    entry.records++;
+    
+    if (item.crop) entry.commodities.add(item.crop);
+    
+    const rawRecord = item.raw_record as any || {};
+    if (rawRecord.market) entry.markets.add(rawRecord.market);
+    
+    const price = getModalPrice(item);
+    if (price !== null) {
+      entry.avgPrice = (entry.avgPrice * entry.priceCount + price) / (entry.priceCount + 1);
+      entry.priceCount++;
+    }
+  });
+  
+  const summaries: string[] = [];
+  stateMap.forEach((value, state) => {
+    summaries.push(`${state}: ${value.records} records, ${value.commodities.size} commodities, ` +
+      `${value.markets.size} markets, Avg Price: ₹${Math.round(value.avgPrice)}`);
+  });
+  
+  return summaries.join('\n');
 }
