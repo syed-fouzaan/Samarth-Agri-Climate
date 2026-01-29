@@ -206,6 +206,24 @@ export const StateDashboard = () => {
     );
   }
 
+  // Show empty state when no data is synced yet
+  if (datasets.length === 0 && stateData.length === 0) {
+    return (
+      <Card className="p-8 text-center">
+        <Database className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+        <h3 className="text-xl font-semibold mb-2">No Data Synced Yet</h3>
+        <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+          Go to the <strong>Ingest Data</strong> tab to sync commodity market data from data.gov.in. 
+          Once synced, you'll see state-wise comparisons and analytics here.
+        </p>
+        <Button variant="outline" onClick={loadDashboardData}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh Dashboard
+        </Button>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Dataset Overview */}
