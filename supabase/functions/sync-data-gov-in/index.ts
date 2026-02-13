@@ -14,11 +14,15 @@ serve(async (req) => {
   }
 
   try {
-    const { resourceId, limit = 100, offset = 0 } = await req.json();
-    
-    if (!resourceId) {
+    const body = await req.json();
+    const resourceId = typeof body?.resourceId === 'string' ? body.resourceId.trim() : '';
+    const limit = Math.min(Math.max(parseInt(body?.limit) || 100, 1), 500);
+    const offset = Math.max(parseInt(body?.offset) || 0, 0);
+
+    // Input validation
+    if (!resourceId || resourceId.length > 200 || !/^[a-zA-Z0-9_-]+$/.test(resourceId)) {
       return new Response(
-        JSON.stringify({ success: false, error: 'resourceId is required' }),
+        JSON.stringify({ success: false, error: 'Valid resourceId is required (alphanumeric, max 200 chars)' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -188,8 +192,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || 'Failed to sync data',
-        details: error.toString()
+        error: 'Failed to sync data. Please try again.'
       }),
       {
         status: 500,

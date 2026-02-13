@@ -12,8 +12,31 @@ serve(async (req) => {
   }
 
   try {
-    const { datasetId, sampleData, dataType } = await req.json();
-    
+    const body = await req.json();
+    const datasetId = typeof body?.datasetId === 'string' ? body.datasetId.trim() : '';
+    const sampleData = Array.isArray(body?.sampleData) ? body.sampleData : [];
+    const dataType = typeof body?.dataType === 'string' ? body.dataType : '';
+
+    // Input validation
+    if (!datasetId || datasetId.length > 200) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Valid datasetId is required (max 200 chars)' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (!['production', 'rainfall'].includes(dataType)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'dataType must be "production" or "rainfall"' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (sampleData.length === 0 || sampleData.length > 500) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'sampleData must contain 1-500 records' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -128,8 +151,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || 'Failed to ingest data',
-        details: error.toString()
+        error: 'Failed to ingest data. Please try again.'
       }),
       {
         status: 500,
