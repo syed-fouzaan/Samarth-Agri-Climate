@@ -14,14 +14,33 @@ serve(async (req) => {
   const startTime = Date.now();
   
   try {
-    const { question, sessionId } = await req.json();
-    
-    if (!question || typeof question !== 'string') {
+    const body = await req.json();
+    const question = typeof body?.question === 'string' ? body.question.trim() : '';
+    const sessionId = typeof body?.sessionId === 'string' ? body.sessionId : undefined;
+
+    // Input validation
+    if (!question || question.length < 3) {
       return new Response(
-        JSON.stringify({ error: 'Question is required' }),
+        JSON.stringify({ error: 'Question must be at least 3 characters' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    if (question.length > 1000) {
+      return new Response(
+        JSON.stringify({ error: 'Question must be under 1000 characters' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    // Validate sessionId format if provided
+    if (sessionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid session ID format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Sanitize question for AI prompt (remove potential injection markers)
+    const sanitizedQuestion = question.replace(/[<>]/g, '').slice(0, 1000);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -32,13 +51,13 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    console.log('Processing query:', question);
+    console.log('Processing query:', sanitizedQuestion.substring(0, 100));
 
     // Create query log entry
     const { data: queryLog, error: logError } = await supabase
       .from('query_logs')
       .insert({
-        question,
+        question: sanitizedQuestion,
         status: 'processing',
         session_id: sessionId,
         execution_steps: []
@@ -155,7 +174,7 @@ Response format (JSON):
     // Build detailed data context
     const stateDataSummary = buildStateDataSummary(recentProduction || []);
 
-    const userPrompt = `Question: ${question}
+    const userPrompt = `Question: ${sanitizedQuestion}
 
 STATE-WISE DATA SUMMARY:
 ${stateDataSummary}
@@ -276,11 +295,13 @@ Analyze this REAL market data and provide specific insights, predictions, and re
   } catch (error: any) {
     console.error('Error processing query:', error);
     
+    // Return safe error message without internal details
+    const safeMessage = error.message?.includes('rate limit') ? 'Rate limit exceeded. Please try again later.'
+      : error.message?.includes('credits') ? 'AI usage credits depleted.'
+      : 'Failed to process query. Please try again.';
+
     return new Response(
-      JSON.stringify({
-        error: error.message || 'Failed to process query',
-        details: error.toString()
-      }),
+      JSON.stringify({ error: safeMessage }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
