@@ -9,9 +9,12 @@ import { DataIngestion } from "@/components/DataIngestion";
 import { BackendExplorer } from "@/components/BackendExplorer";
 import { StateDashboard } from "@/components/StateDashboard";
 import { AIAnalytics } from "@/components/AIAnalytics";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const { t } = useLanguage();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
@@ -28,25 +31,26 @@ const Index = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                  Samarth Agri-Climate
+                  {t.appName}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  AI-Powered Agricultural Intelligence
+                  {t.appTagline}
                 </p>
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Database className="h-4 w-4 text-primary" />
-                  <span>Live Data</span>
+                  <span>{t.liveData}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Brain className="h-4 w-4 text-accent" />
-                  <span>AI Analytics</span>
+                  <span>{t.aiAnalytics}</span>
                 </div>
               </div>
+              <LanguageSwitcher />
             </div>
           </div>
         </div>
@@ -54,55 +58,49 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full max-w-4xl mx-auto grid-cols-6 bg-muted/50">
             <TabsTrigger value="dashboard" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <MapPin className="h-4 w-4 mr-2" />
-              Dashboard
+              {t.dashboard}
             </TabsTrigger>
             <TabsTrigger value="compare" className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
               <BarChart3 className="h-4 w-4 mr-2" />
-              Compare
+              {t.compare}
             </TabsTrigger>
             <TabsTrigger value="ai" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
               <Brain className="h-4 w-4 mr-2" />
-              AI Analytics
+              {t.aiAnalytics}
             </TabsTrigger>
             <TabsTrigger value="query" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
               <Search className="h-4 w-4 mr-2" />
-              Query
+              {t.query}
             </TabsTrigger>
             <TabsTrigger value="ingest" className="data-[state=active]:bg-foreground data-[state=active]:text-background">
               <Database className="h-4 w-4 mr-2" />
-              Ingest
+              {t.ingest}
             </TabsTrigger>
             <TabsTrigger value="backend" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
               <TrendingUp className="h-4 w-4 mr-2" />
-              Backend
+              {t.backend}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">
             <StateDashboard />
           </TabsContent>
-
           <TabsContent value="compare" className="space-y-6">
             <StateDashboard />
           </TabsContent>
-
           <TabsContent value="ai" className="space-y-6">
             <AIAnalytics />
           </TabsContent>
-
           <TabsContent value="query" className="space-y-6">
             <QueryInterface />
           </TabsContent>
-
           <TabsContent value="ingest" className="space-y-6">
             <DataIngestion />
           </TabsContent>
-
           <TabsContent value="backend" className="space-y-6">
             <BackendExplorer />
           </TabsContent>
@@ -113,8 +111,8 @@ const Index = () => {
       <footer className="border-t mt-16 py-8 bg-card/30 backdrop-blur-sm">
         <div className="container mx-auto px-4">
           <div className="text-center text-sm text-muted-foreground">
-            <p>Powered by data.gov.in Agriculture & IMD Climate Datasets</p>
-            <p className="mt-2">AI-powered predictions with full citation and provenance tracking</p>
+            <p>{t.poweredBy}</p>
+            <p className="mt-2">{t.aiPoweredPredictions}</p>
           </div>
         </div>
       </footer>
