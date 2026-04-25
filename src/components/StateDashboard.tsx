@@ -224,8 +224,13 @@ export const StateDashboard = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex flex-col items-center justify-center py-12 gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        {retryAttempt > 1 && (
+          <p className="text-sm text-muted-foreground">
+            Retrying connection… attempt {retryAttempt} of 4
+          </p>
+        )}
       </div>
     );
   }
