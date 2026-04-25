@@ -4,9 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Database, MapPin, TrendingUp, BarChart3, RefreshCw } from "lucide-react";
+import { Loader2, Database, MapPin, TrendingUp, BarChart3, RefreshCw, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { demoDatasets, demoProduction } from "@/data/demoSeedData";
 import {
   BarChart,
   Bar,
@@ -53,33 +54,42 @@ export const StateDashboard = () => {
   const [stateData, setStateData] = useState<StateData[]>([]);
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
+  const [demoMode, setDemoMode] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
 
   useEffect(() => {
     loadDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadDashboardData = async () => {
-    setLoading(true);
-    try {
-      // Fetch datasets
-      const { data: datasetsData, error: datasetsError } = await supabase
-        .from('datasets')
-        .select('id, title, category, total_records, last_synced_at');
-      
-      if (datasetsError) throw datasetsError;
-      setDatasets(datasetsData || []);
+  // Fetch with exponential backoff. Throws if all attempts fail.
+  const fetchWithRetry = async (maxAttempts = 4) => {
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      setRetryAttempt(attempt);
+      try {
+        const [datasetsRes, productionRes] = await Promise.all([
+          supabase.from('datasets').select('id, title, category, total_records, last_synced_at'),
+          supabase.from('fact_production').select('state, raw_record, crop, district, created_at'),
+        ]);
+        if (datasetsRes.error) throw datasetsRes.error;
+        if (productionRes.error) throw productionRes.error;
+        return { datasetsData: datasetsRes.data || [], productionData: productionRes.data || [] };
+      } catch (err) {
+        lastError = err;
+        if (attempt < maxAttempts) {
+          // Exponential backoff: 500ms, 1s, 2s, 4s (capped)
+          const delay = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    }
+    throw lastError;
+  };
 
-      // Fetch state-wise aggregated data
-      const { data: productionData, error: productionError } = await supabase
-        .from('fact_production')
-        .select('state, raw_record, crop, district, created_at');
-      
-      if (productionError) throw productionError;
-
-      // Process state data
-      const stateMap = new Map<string, StateData>();
-      
-      (productionData || []).forEach((record: any) => {
+  const processProduction = (productionData: any[]) => {
+    const stateMap = new Map<string, StateData>();
+    productionData.forEach((record: any) => {
         const state = record.state;
         if (!stateMap.has(state)) {
           stateMap.set(state, {
