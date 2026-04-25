@@ -90,60 +90,74 @@ export const StateDashboard = () => {
   const processProduction = (productionData: any[]) => {
     const stateMap = new Map<string, StateData>();
     productionData.forEach((record: any) => {
-        const state = record.state;
-        if (!stateMap.has(state)) {
-          stateMap.set(state, {
-            state,
-            record_count: 0,
-            avg_modal_price: 0,
-            commodities: [],
-            markets: 0,
-            price_trend: []
-          });
-        }
-        
-        const stateEntry = stateMap.get(state)!;
-        stateEntry.record_count++;
-        
-        // Extract price from raw_record
-        const rawRecord = record.raw_record as any;
-        if (rawRecord?.modal_price) {
-          const price = parseFloat(rawRecord.modal_price);
-          if (!isNaN(price)) {
-            stateEntry.avg_modal_price = (stateEntry.avg_modal_price * (stateEntry.record_count - 1) + price) / stateEntry.record_count;
-          }
-        }
-        
-        // Track commodities
-        if (record.crop && !stateEntry.commodities.includes(record.crop)) {
-          stateEntry.commodities.push(record.crop);
-        }
-        
-        // Track markets
-        if (rawRecord?.market) {
-          stateEntry.markets++;
-        }
-      });
-
-      const processedStates = Array.from(stateMap.values())
-        .sort((a, b) => b.record_count - a.record_count);
-      
-      setStateData(processedStates);
-      setTotalRecords(productionData?.length || 0);
-      
-      // Auto-select top 3 states
-      if (processedStates.length > 0 && selectedStates.length === 0) {
-        setSelectedStates(processedStates.slice(0, 3).map(s => s.state));
+      const state = record.state;
+      if (!stateMap.has(state)) {
+        stateMap.set(state, {
+          state,
+          record_count: 0,
+          avg_modal_price: 0,
+          commodities: [],
+          markets: 0,
+          price_trend: []
+        });
       }
 
+      const stateEntry = stateMap.get(state)!;
+      stateEntry.record_count++;
+
+      const rawRecord = record.raw_record as any;
+      if (rawRecord?.modal_price) {
+        const price = parseFloat(rawRecord.modal_price);
+        if (!isNaN(price)) {
+          stateEntry.avg_modal_price = (stateEntry.avg_modal_price * (stateEntry.record_count - 1) + price) / stateEntry.record_count;
+        }
+      }
+
+      if (record.crop && !stateEntry.commodities.includes(record.crop)) {
+        stateEntry.commodities.push(record.crop);
+      }
+
+      if (rawRecord?.market) {
+        stateEntry.markets++;
+      }
+    });
+
+    return Array.from(stateMap.values()).sort((a, b) => b.record_count - a.record_count);
+  };
+
+  const applyData = (
+    datasetsData: DatasetStats[],
+    productionData: any[],
+    isDemo: boolean
+  ) => {
+    setDatasets(datasetsData);
+    const processedStates = processProduction(productionData);
+    setStateData(processedStates);
+    setTotalRecords(productionData.length);
+    setDemoMode(isDemo);
+
+    if (processedStates.length > 0 && selectedStates.length === 0) {
+      setSelectedStates(processedStates.slice(0, 3).map((s) => s.state));
+    }
+  };
+
+  const loadDashboardData = async () => {
+    setLoading(true);
+    setRetryAttempt(0);
+    try {
+      const { datasetsData, productionData } = await fetchWithRetry();
+      applyData(datasetsData as DatasetStats[], productionData, false);
     } catch (error: any) {
-      console.error('Dashboard load error:', error);
+      console.error('Dashboard load error after retries:', error);
+      // Fallback to demo seed data so the dashboard remains usable
+      applyData(demoDatasets as DatasetStats[], demoProduction, true);
       toast({
-        title: "Failed to load dashboard",
-        description: error.message,
-        variant: "destructive"
+        title: "Showing demo data",
+        description: "Live backend unreachable — loaded cached sample data instead.",
+        variant: "destructive",
       });
     } finally {
+      setRetryAttempt(0);
       setLoading(false);
     }
   };
