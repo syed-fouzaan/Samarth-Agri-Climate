@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Leaf, Cloud, Search, Database, TrendingUp, BarChart3, Brain, MapPin } from "lucide-react";
+import { Leaf, Cloud, Search, Database, TrendingUp, BarChart3, Brain, MapPin, LogOut } from "lucide-react";
 import { QueryInterface } from "@/components/QueryInterface";
 import { DataInsights } from "@/components/DataInsights";
 import { DataIngestion } from "@/components/DataIngestion";
@@ -11,10 +11,12 @@ import { StateDashboard } from "@/components/StateDashboard";
 import { AIAnalytics } from "@/components/AIAnalytics";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/i18n/LanguageContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const { t } = useLanguage();
+  const { user, signOut } = useAuth();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
@@ -51,6 +53,13 @@ const Index = () => {
                 </div>
               </div>
               <LanguageSwitcher />
+              <div className="hidden sm:flex items-center text-sm text-muted-foreground max-w-[180px] truncate">
+                {user?.email}
+              </div>
+              <Button variant="outline" size="sm" onClick={signOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign out
+              </Button>
             </div>
           </div>
         </div>
