@@ -83,6 +83,7 @@ serve(async (req) => {
         question: sanitizedQuestion,
         status: 'processing',
         session_id: sessionId,
+        user_id: userId,
         execution_steps: []
       })
       .select()
