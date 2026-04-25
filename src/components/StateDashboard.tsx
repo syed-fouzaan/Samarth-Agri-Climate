@@ -4,9 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Database, MapPin, TrendingUp, BarChart3, RefreshCw } from "lucide-react";
+import { Loader2, Database, MapPin, TrendingUp, BarChart3, RefreshCw, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { demoDatasets, demoProduction } from "@/data/demoSeedData";
 import {
   BarChart,
   Bar,
@@ -53,87 +54,110 @@ export const StateDashboard = () => {
   const [stateData, setStateData] = useState<StateData[]>([]);
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
+  const [demoMode, setDemoMode] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
 
   useEffect(() => {
     loadDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fetch with exponential backoff. Throws if all attempts fail.
+  const fetchWithRetry = async (maxAttempts = 4) => {
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      setRetryAttempt(attempt);
+      try {
+        const [datasetsRes, productionRes] = await Promise.all([
+          supabase.from('datasets').select('id, title, category, total_records, last_synced_at'),
+          supabase.from('fact_production').select('state, raw_record, crop, district, created_at'),
+        ]);
+        if (datasetsRes.error) throw datasetsRes.error;
+        if (productionRes.error) throw productionRes.error;
+        return { datasetsData: datasetsRes.data || [], productionData: productionRes.data || [] };
+      } catch (err) {
+        lastError = err;
+        if (attempt < maxAttempts) {
+          // Exponential backoff: 500ms, 1s, 2s, 4s (capped)
+          const delay = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    }
+    throw lastError;
+  };
+
+  const processProduction = (productionData: any[]) => {
+    const stateMap = new Map<string, StateData>();
+    productionData.forEach((record: any) => {
+      const state = record.state;
+      if (!stateMap.has(state)) {
+        stateMap.set(state, {
+          state,
+          record_count: 0,
+          avg_modal_price: 0,
+          commodities: [],
+          markets: 0,
+          price_trend: []
+        });
+      }
+
+      const stateEntry = stateMap.get(state)!;
+      stateEntry.record_count++;
+
+      const rawRecord = record.raw_record as any;
+      if (rawRecord?.modal_price) {
+        const price = parseFloat(rawRecord.modal_price);
+        if (!isNaN(price)) {
+          stateEntry.avg_modal_price = (stateEntry.avg_modal_price * (stateEntry.record_count - 1) + price) / stateEntry.record_count;
+        }
+      }
+
+      if (record.crop && !stateEntry.commodities.includes(record.crop)) {
+        stateEntry.commodities.push(record.crop);
+      }
+
+      if (rawRecord?.market) {
+        stateEntry.markets++;
+      }
+    });
+
+    return Array.from(stateMap.values()).sort((a, b) => b.record_count - a.record_count);
+  };
+
+  const applyData = (
+    datasetsData: DatasetStats[],
+    productionData: any[],
+    isDemo: boolean
+  ) => {
+    setDatasets(datasetsData);
+    const processedStates = processProduction(productionData);
+    setStateData(processedStates);
+    setTotalRecords(productionData.length);
+    setDemoMode(isDemo);
+
+    if (processedStates.length > 0 && selectedStates.length === 0) {
+      setSelectedStates(processedStates.slice(0, 3).map((s) => s.state));
+    }
+  };
 
   const loadDashboardData = async () => {
     setLoading(true);
+    setRetryAttempt(0);
     try {
-      // Fetch datasets
-      const { data: datasetsData, error: datasetsError } = await supabase
-        .from('datasets')
-        .select('id, title, category, total_records, last_synced_at');
-      
-      if (datasetsError) throw datasetsError;
-      setDatasets(datasetsData || []);
-
-      // Fetch state-wise aggregated data
-      const { data: productionData, error: productionError } = await supabase
-        .from('fact_production')
-        .select('state, raw_record, crop, district, created_at');
-      
-      if (productionError) throw productionError;
-
-      // Process state data
-      const stateMap = new Map<string, StateData>();
-      
-      (productionData || []).forEach((record: any) => {
-        const state = record.state;
-        if (!stateMap.has(state)) {
-          stateMap.set(state, {
-            state,
-            record_count: 0,
-            avg_modal_price: 0,
-            commodities: [],
-            markets: 0,
-            price_trend: []
-          });
-        }
-        
-        const stateEntry = stateMap.get(state)!;
-        stateEntry.record_count++;
-        
-        // Extract price from raw_record
-        const rawRecord = record.raw_record as any;
-        if (rawRecord?.modal_price) {
-          const price = parseFloat(rawRecord.modal_price);
-          if (!isNaN(price)) {
-            stateEntry.avg_modal_price = (stateEntry.avg_modal_price * (stateEntry.record_count - 1) + price) / stateEntry.record_count;
-          }
-        }
-        
-        // Track commodities
-        if (record.crop && !stateEntry.commodities.includes(record.crop)) {
-          stateEntry.commodities.push(record.crop);
-        }
-        
-        // Track markets
-        if (rawRecord?.market) {
-          stateEntry.markets++;
-        }
-      });
-
-      const processedStates = Array.from(stateMap.values())
-        .sort((a, b) => b.record_count - a.record_count);
-      
-      setStateData(processedStates);
-      setTotalRecords(productionData?.length || 0);
-      
-      // Auto-select top 3 states
-      if (processedStates.length > 0 && selectedStates.length === 0) {
-        setSelectedStates(processedStates.slice(0, 3).map(s => s.state));
-      }
-
+      const { datasetsData, productionData } = await fetchWithRetry();
+      applyData(datasetsData as DatasetStats[], productionData, false);
     } catch (error: any) {
-      console.error('Dashboard load error:', error);
+      console.error('Dashboard load error after retries:', error);
+      // Fallback to demo seed data so the dashboard remains usable
+      applyData(demoDatasets as DatasetStats[], demoProduction, true);
       toast({
-        title: "Failed to load dashboard",
-        description: error.message,
-        variant: "destructive"
+        title: "Showing demo data",
+        description: "Live backend unreachable — loaded cached sample data instead.",
+        variant: "destructive",
       });
     } finally {
+      setRetryAttempt(0);
       setLoading(false);
     }
   };
@@ -200,8 +224,13 @@ export const StateDashboard = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex flex-col items-center justify-center py-12 gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        {retryAttempt > 1 && (
+          <p className="text-sm text-muted-foreground">
+            Retrying connection… attempt {retryAttempt} of 4
+          </p>
+        )}
       </div>
     );
   }
@@ -226,6 +255,21 @@ export const StateDashboard = () => {
 
   return (
     <div className="space-y-6">
+      {demoMode && (
+        <Card className="p-4 border-orange-500/40 bg-orange-500/5 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-orange-500 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-sm">Demo mode active</p>
+            <p className="text-sm text-muted-foreground">
+              Couldn't reach the live backend. Showing cached sample data so you can still explore the dashboard.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={loadDashboardData}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry live data
+          </Button>
+        </Card>
+      )}
       {/* Dataset Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-4 bg-gradient-to-br from-card to-primary/5 border-primary/20">
