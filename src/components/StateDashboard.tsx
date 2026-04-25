@@ -255,6 +255,21 @@ export const StateDashboard = () => {
 
   return (
     <div className="space-y-6">
+      {demoMode && (
+        <Card className="p-4 border-orange-500/40 bg-orange-500/5 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-orange-500 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-sm">Demo mode active</p>
+            <p className="text-sm text-muted-foreground">
+              Couldn't reach the live backend. Showing cached sample data so you can still explore the dashboard.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={loadDashboardData}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry live data
+          </Button>
+        </Card>
+      )}
       {/* Dataset Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-4 bg-gradient-to-br from-card to-primary/5 border-primary/20">
