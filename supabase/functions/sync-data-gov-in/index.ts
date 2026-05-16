@@ -1,14 +1,33 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.3';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ALLOWED_ORIGIN_PATTERNS: (string | RegExp)[] = [
+  /^https?:\/\/localhost(:\d+)?$/,
+  /\.lovable\.app$/,
+  /\.lovableproject\.com$/,
+  /\.lovable\.dev$/,
+];
+
+function buildCorsHeaders(origin: string | null): Record<string, string> {
+  const isAllowed = !!origin && ALLOWED_ORIGIN_PATTERNS.some(p =>
+    typeof p === 'string' ? p === origin : p.test(origin)
+  );
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? origin! : 'null',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  };
+}
+
+function sanitizeUrl(url: string): string {
+  return url.replace(/api-key=[^&]+/i, 'api-key=***REDACTED***');
+}
 
 const DATA_GOV_API_KEY = Deno.env.get('DATA_GOV_API_KEY');
 
 serve(async (req) => {
+  const corsHeaders = buildCorsHeaders(req.headers.get('Origin'));
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -65,7 +84,8 @@ serve(async (req) => {
 
     // Fetch data from data.gov.in API
     const apiUrl = `https://api.data.gov.in/resource/${resourceId}?api-key=${DATA_GOV_API_KEY}&format=json&limit=${limit}&offset=${offset}`;
-    
+    const safeApiUrl = sanitizeUrl(apiUrl);
+
     const response = await fetch(apiUrl);
     
     if (!response.ok) {
@@ -103,7 +123,7 @@ serve(async (req) => {
           resource_id: resourceId,
           title: apiData.title || `Dataset ${resourceId}`,
           description: apiData.desc || apiData.description || 'Auto-synced from data.gov.in',
-          api_url: apiUrl,
+          api_url: safeApiUrl,
           category: category,
           columns_mapping: {},
           metadata: {
@@ -150,7 +170,7 @@ serve(async (req) => {
             production_t: record.production_t || record.Production ? parseFloat(record.production_t || record.Production) : null,
             yield_kg_per_ha: record.yield_kg_per_ha || record.Yield ? parseFloat(record.yield_kg_per_ha || record.Yield) : null,
             raw_record: record,
-            data_source_url: apiUrl
+            data_source_url: safeApiUrl
           });
 
         if (error) {
@@ -171,7 +191,7 @@ serve(async (req) => {
             month: record.month || record.Month ? parseInt(record.month || record.Month) : null,
             rainfall_mm: parseFloat(record.rainfall_mm || record.rainfall || record.Rainfall),
             raw_record: record,
-            data_source_url: apiUrl
+            data_source_url: safeApiUrl
           });
 
         if (error) {
