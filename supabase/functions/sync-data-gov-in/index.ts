@@ -123,7 +123,7 @@ serve(async (req) => {
           resource_id: resourceId,
           title: apiData.title || `Dataset ${resourceId}`,
           description: apiData.desc || apiData.description || 'Auto-synced from data.gov.in',
-          api_url: apiUrl,
+          api_url: safeApiUrl,
           category: category,
           columns_mapping: {},
           metadata: {
@@ -170,7 +170,7 @@ serve(async (req) => {
             production_t: record.production_t || record.Production ? parseFloat(record.production_t || record.Production) : null,
             yield_kg_per_ha: record.yield_kg_per_ha || record.Yield ? parseFloat(record.yield_kg_per_ha || record.Yield) : null,
             raw_record: record,
-            data_source_url: apiUrl
+            data_source_url: safeApiUrl
           });
 
         if (error) {
@@ -191,7 +191,7 @@ serve(async (req) => {
             month: record.month || record.Month ? parseInt(record.month || record.Month) : null,
             rainfall_mm: parseFloat(record.rainfall_mm || record.rainfall || record.Rainfall),
             raw_record: record,
-            data_source_url: apiUrl
+            data_source_url: safeApiUrl
           });
 
         if (error) {
