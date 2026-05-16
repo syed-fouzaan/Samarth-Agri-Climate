@@ -84,7 +84,8 @@ serve(async (req) => {
 
     // Fetch data from data.gov.in API
     const apiUrl = `https://api.data.gov.in/resource/${resourceId}?api-key=${DATA_GOV_API_KEY}&format=json&limit=${limit}&offset=${offset}`;
-    
+    const safeApiUrl = sanitizeUrl(apiUrl);
+
     const response = await fetch(apiUrl);
     
     if (!response.ok) {
