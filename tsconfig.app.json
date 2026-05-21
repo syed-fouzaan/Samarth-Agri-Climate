@@ -20,7 +20,7 @@
     "noUnusedParameters": false,
     "noImplicitAny": false,
     "noFallthroughCasesInSwitch": false,
-    "types": ["vitest/globals"],
+    "types": ["vitest/globals", "node", "@testing-library/jest-dom"],
     "paths": {
       "@/*": [
         "./src/*"
