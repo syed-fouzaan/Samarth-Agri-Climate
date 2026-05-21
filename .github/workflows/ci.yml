@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend (build, lint, unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run test
+      - run: bun run build
+
+  edge-functions:
+    name: Edge functions (Deno CORS tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      - name: Run Deno tests for all edge functions
+        run: deno test --allow-net --allow-env supabase/functions/
+
+  security-scan:
+    name: Security regression scan (RLS / CORS / secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. No service-role key referenced from frontend code
+      - name: Block service-role key in frontend
+        run: |
+          if grep -RIn --include='*.ts' --include='*.tsx' \
+              'SERVICE_ROLE\|service_role' src/ ; then
+            echo "::error::Service-role key reference found in src/ — must stay server-side."
+            exit 1
+          fi
+
+      # 2. No wildcard CORS in edge functions
+      - name: Block wildcard CORS
+        run: |
+          if grep -RIn "Access-Control-Allow-Origin.*\\*" supabase/functions/ ; then
+            echo "::error::Wildcard CORS (Access-Control-Allow-Origin: *) detected. Use allow-list helper."
+            exit 1
+          fi
+
+      # 3. Every edge function must validate the JWT
+      - name: Require JWT validation in edge functions
+        run: |
+          missing=0
+          for f in supabase/functions/*/index.ts; do
+            if ! grep -q "getClaims" "$f"; then
+              echo "::error file=$f::Edge function is missing getClaims() JWT validation."
+              missing=1
+            fi
+          done
+          exit $missing
+
+      # 4. Public-write RLS regression: any new policy that grants
+      #    INSERT/UPDATE/DELETE to anon/public on data tables must
+      #    be deliberate. Fails on `TO public ... FOR INSERT` etc.
+      - name: Block accidental public-write RLS
+        run: |
+          # Inspect only the most recent migration file in this PR
+          violations=$(grep -RInE \
+            "FOR (INSERT|UPDATE|DELETE)[^;]*TO (public|anon)" \
+            supabase/migrations/ || true)
+          if [ -n "$violations" ]; then
+            echo "::error::A migration grants write access to anon/public:"
+            echo "$violations"
+            exit 1
+          fi
+
+      # 5. Hard-coded api-key= values in source (other than placeholders)
+      - name: Block hard-coded api-key= values
+        run: |
+          if grep -RInE "api-key=[A-Za-z0-9]{8,}" \
+              --exclude-dir=node_modules --exclude-dir=.git . ; then
+            echo "::error::Possible hard-coded API key found."
+            exit 1
+          fi
